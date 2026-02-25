@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  OPERATOR
+}
+
+enum MaintenanceFrequency {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  CUSTOM_DAYS
+}
+
+enum MaintenanceStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum WorkOrderPriority {
+  EMERGENCY
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum WorkOrderStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  WAITING
+  COMPLETE
+  CANCELED
+}
+
+enum InvoiceStatus {
+  NEW
+  APPROVED
+  PAID
+  DISPUTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Property {
+  id               String            @id @default(cuid())
+  name             String
+  address          String?
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  assets           Asset[]
+  maintenanceTasks MaintenanceTask[]
+  workOrders       WorkOrder[]
+  serviceLogs      ServiceLog[]
+  vendors          Vendor[]
+  invoices         Invoice[]
+  documents        Document[]
+}
+
+model Asset {
+  id               String            @id @default(cuid())
+  propertyId       String
+  property         Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name             String
+  category         String
+  location         String?
+  installDate      DateTime?
+  manufacturer     String?
+  model            String?
+  serialNumber     String?
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  maintenanceTasks MaintenanceTask[]
+  workOrders       WorkOrder[]
+  serviceLogs      ServiceLog[]
+  invoices         Invoice[]
+
+  @@index([propertyId])
+}
+
+model MaintenanceTask {
+  id             String               @id @default(cuid())
+  propertyId     String
+  property       Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  linkedAssetId  String?
+  linkedAsset    Asset?               @relation(fields: [linkedAssetId], references: [id], onDelete: SetNull)
+  defaultVendorId String?
+  defaultVendor  Vendor?              @relation(fields: [defaultVendorId], references: [id], onDelete: SetNull)
+  frequencyType  MaintenanceFrequency
+  frequencyValue Int
+  nextDueDate    DateTime
+  status         MaintenanceStatus    @default(ACTIVE)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([propertyId, nextDueDate])
+}
+
+model WorkOrder {
+  id             String            @id @default(cuid())
+  propertyId     String
+  property       Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  priority       WorkOrderPriority @default(NORMAL)
+  status         WorkOrderStatus   @default(NEW)
+  linkedAssetId  String?
+  linkedAsset    Asset?            @relation(fields: [linkedAssetId], references: [id], onDelete: SetNull)
+  vendorId       String?
+  vendor         Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  requestedBy    String
+  requestedDate  DateTime
+  dueDate        DateTime?
+  completionDate DateTime?
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  serviceLogs    ServiceLog[]
+  invoices       Invoice[]
+
+  @@index([propertyId, status])
+}
+
+model ServiceLog {
+  id            String    @id @default(cuid())
+  propertyId    String
+  property      Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  workOrderId   String?
+  workOrder     WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  linkedAssetId String?
+  linkedAsset   Asset?    @relation(fields: [linkedAssetId], references: [id], onDelete: SetNull)
+  vendorId      String?
+  vendor        Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  serviceDate   DateTime
+  summary       String
+  laborHours    Decimal?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Vendor {
+  id                String            @id @default(cuid())
+  propertyId        String?
+  property          Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  name              String
+  trade             String
+  contactName       String?
+  email             String?
+  phone             String?
+  notes             String?
+  magicUploadToken  String            @unique
+  magicTokenRevoked Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  maintenanceTasks  MaintenanceTask[]
+  workOrders        WorkOrder[]
+  serviceLogs       ServiceLog[]
+  invoices          Invoice[]
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  propertyId    String
+  property      Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  vendorId      String
+  vendor        Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  workOrderId   String?
+  workOrder     WorkOrder?    @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  linkedAssetId String?
+  linkedAsset   Asset?        @relation(fields: [linkedAssetId], references: [id], onDelete: SetNull)
+  invoiceNumber String?
+  invoiceDate   DateTime
+  dueDate       DateTime?
+  amount        Decimal
+  category      String
+  status        InvoiceStatus @default(NEW)
+  paidDate      DateTime?
+  notes         String?
+  tags          String[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([propertyId, status])
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  fileName   String
+  mimeType   String
+  fileSize   Int
+  storageKey String
+  uploadedBy String
+  linkedType String?
+  linkedId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId, linkedType, linkedId])
+}
